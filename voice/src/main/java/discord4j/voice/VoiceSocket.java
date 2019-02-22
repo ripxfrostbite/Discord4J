@@ -18,10 +18,8 @@ package discord4j.voice;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import reactor.core.publisher.EmitterProcessor;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.FluxSink;
-import reactor.core.publisher.Mono;
+import io.netty.handler.logging.LoggingHandler;
+import reactor.core.publisher.*;
 import reactor.netty.NettyPipeline;
 import reactor.netty.udp.UdpClient;
 
@@ -47,13 +45,15 @@ public class VoiceSocket {
                 .host(address)
                 .port(port)
                 .handle((in, out) -> {
+                    in.withConnection(connection -> connection.addHandlerLast(new VoiceSocketLoggingAdapter()));
+
                     Mono<Void> inboundThen = in.receive()
-                            .log("discord4j.voice.udp.inbound", Level.FINEST)
+                            .log("discord4j.voice.udp.inbound", Level.FINEST, SignalType.CANCEL, SignalType.ON_ERROR, SignalType.ON_COMPLETE, SignalType.ON_SUBSCRIBE)
                             .doOnNext(this.inboundSink::next)
                             .then();
 
                     Mono<Void> outboundThen = out.options(NettyPipeline.SendOptions::flushOnEach)
-                            .send(outbound.log("discord4j.voice.udp.outbound", Level.FINEST))
+                            .send(outbound.log("discord4j.voice.udp.outbound", Level.FINEST, SignalType.CANCEL, SignalType.ON_ERROR, SignalType.ON_COMPLETE, SignalType.ON_SUBSCRIBE))
                             .then();
 
                     return Mono.zip(inboundThen, outboundThen).then();

@@ -24,7 +24,7 @@ import java.nio.ByteBuffer;
 
 final class PacketTransformer {
 
-    private static final int RTP_HEADER_LENGTH = 12;
+    static final int RTP_HEADER_LENGTH = 12;
     private static final int EXTENDED_RTP_HEADER_LENGTH = 24;
 
     private final int ssrc;
