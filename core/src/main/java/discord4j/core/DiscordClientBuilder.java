@@ -33,6 +33,8 @@ import discord4j.gateway.json.GatewayPayload;
 import discord4j.gateway.json.VoiceStateUpdate;
 import discord4j.gateway.payload.JacksonPayloadReader;
 import discord4j.gateway.payload.JacksonPayloadWriter;
+import discord4j.gateway.payload.PayloadReader;
+import discord4j.gateway.payload.PayloadWriter;
 import discord4j.gateway.retry.RetryOptions;
 import discord4j.rest.RestClient;
 import discord4j.rest.http.ExchangeStrategies;
@@ -117,6 +119,12 @@ public final class DiscordClientBuilder {
 
     @Nullable
     private PayloadTransformer identifyLimiter;
+
+    @Nullable
+    private PayloadReader payloadReader;
+
+    @Nullable
+    private PayloadWriter payloadWriter;
 
     private Scheduler voiceConnectionScheduler = Schedulers.elastic();
 
@@ -518,6 +526,16 @@ public final class DiscordClientBuilder {
         return this;
     }
 
+    public DiscordClientBuilder setPayloadReader(PayloadReader payloadReader) {
+        this.payloadReader = payloadReader;
+        return this;
+    }
+
+    public DiscordClientBuilder setPayloadWriter(PayloadWriter payloadWriter) {
+        this.payloadWriter = payloadWriter;
+        return this;
+    }
+
     /**
      * Get the current {@link Scheduler} for voice sending tasks.
      *
@@ -670,8 +688,8 @@ public final class DiscordClientBuilder {
         final RetryOptions retryOptions = initRetryOptions();
         final StoreInvalidator storeInvalidator = new StoreInvalidator(stateHolder);
         final GatewayClient gatewayClient = initGatewayClientFactory().getGatewayClient(httpClient,
-                new JacksonPayloadReader(jackson.getObjectMapper()),
-                new JacksonPayloadWriter(jackson.getObjectMapper()),
+                payloadReader,
+                payloadWriter,
                 retryOptions, token, identifyOptions, storeInvalidator.then(initGatewayObserver()),
                 initIdentifyLimiter());
 
