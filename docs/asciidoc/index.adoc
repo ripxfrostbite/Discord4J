@@ -1,0 +1,14 @@
+= Discord4J
+Discord4J Developers
+:doctype: book
+:icons: font
+:encoding: utf-8
+:lang: en
+:toc2:
+:toclevels: 3
+:sectnums:
+:sectanchors:
+
+include::migration-guide.adoc[leveloffset=1]
+
+include::glossary.adoc[leveloffset=1]

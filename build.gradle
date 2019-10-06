@@ -6,6 +6,7 @@ plugins {
     id 'io.spring.dependency-management' version '1.0.8.RELEASE' apply false
     id 'com.github.ben-manes.versions' version '0.25.0'
     id 'net.researchgate.release' version '2.8.1'
+    id 'org.asciidoctor.convert' version '1.5.11'
 }
 
 ext {
@@ -33,6 +34,28 @@ ext {
 
     isJitpack = "true" == System.getenv("JITPACK")
     isRelease = !version.toString().endsWith('-SNAPSHOT')
+}
+
+apply plugin: 'org.asciidoctor.convert'
+
+asciidoctor {
+    sourceDir "$rootDir/docs/asciidoc/"
+    resources {
+        from(sourceDir) {
+            include 'highlight/**/*'
+        }
+    }
+    attributes 'source-highlighter': 'highlightjs',
+            'highlightjsdir': "./highlight",
+            'highlightjs-theme': 'railscasts',
+            stylesdir: "stylesheets/",
+            stylesheet: 'discord4j.css'
+}
+
+task docsZip(type: Zip, dependsOn: asciidoctor) {
+    baseName = 'discord4j-docs'
+    from("$buildDir/asciidoc/html5/index.html") { into("docs/") }
+    from("$buildDir/asciidoc/html5/highlight") { into("docs/highlight/") }
 }
 
 allprojects {
@@ -112,6 +135,7 @@ allprojects {
     artifacts {
         archives javadocJar
         archives sourcesJar
+        archives rootProject.tasks.docsZip
     }
 
     if (!isJitpack && isRelease) {
@@ -304,6 +328,7 @@ if (isJitpack) {
         publications {
             maven(MavenPublication) {
                 artifact aggregateJavadocJar
+                artifact docsZip
             }
         }
     }
@@ -330,6 +355,7 @@ task updateReadme {
 }
 
 preTagCommit.dependsOn updateReadme
+assemble.dependsOn docsZip
 
 wrapper {
     distributionType = Wrapper.DistributionType.ALL

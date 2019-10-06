@@ -1,0 +1,142 @@
+= Migration Guide
+
+IMPORTANT: This document is a work in progress 🚧 
+
+This document is meant to help you migrate your application to Discord4J 3.1 if you're already on 3.0. If not, please check our link:Migration-Guide[guide] first.
+
+== Before you start
+Discord4J is transitioning to a new architecture where users are able to work with the library REST capabilities separately from real-time Gateway operations.
+
+In addition, spawning Gateway connections is treated separately from `DiscordClient`, allowing users to have all joining shards publish events and entities to a single location, removing the need of using separate classes for handling multiple shards in a single process.
+
+While this means that a single `EventDispatcher` and `StateHolder` are shared across all shards controlled by a single `GatewayDiscordClient`, you are in control of what shards are connected to it. This enables you to setup distributed architectures where certain actions are coordinated even across multiple JVMs.
+
+== Glossary
+Here are some terms used throughput this document, describing the core components within Discord4J.
+|=======================
+| Class | Description
+
+| `DiscordClient` | Main REST API wrapper and an entry point to spawn Gateway connections. Can be obtained by calling `getClient().rest()` from most objects.
+| `CoreResources` | A mediator for resources essential to operate on `DiscordClient`, like the `RestClient`, `JacksonResources` and `ReactorResources`.
+| `GatewayDiscordClient`  | Discord Gateway is the websocket connection receiving real-time updates. In v3.1 we call `GatewayDiscordClient` to the manager of all resources and state regarding all participating shards. Connections are maintained by it and is capable of giving access to cached entities from updates. Can be obtained by calling `getClient()` from most objects.
+| `GatewayBootstrap` | A builder to create a `GatewayDiscordClient`. The place where resources and many configurations are set before connecting to Discord Gateway. Defaults are used to enable built-in sharding and can be customized in many ways.
+| `GatewayClient` | The same component as in v3.0, it keeps all state regarding a single shard lifecycle, providing automatic reconnections and forwarding updates to the parent `GatewayDiscordClient`.
+| `GatewayResources` | A mediator for most resources required by a `GatewayClient` to operate. The rest are provided during `GatewayBootstrap` setup and are used to build `GatewayOptions`.
+| `GatewayOptions` | The set of configuration passed to a `GatewayClient` in order to be created.
+| `ShardCoordinator` | A manager in charge of relaying lifecycle events for sharding. It is used to notify clients that shards are identifying, connecting or disconnecting to allow for distributed application scenarios where the notification may be relayed across boundaries.
+| `StateHolder` | The same component as in v3.0, it stores all entity updates from the Gateway. In v3.1 though, it will receive updates from all joining shards.
+| `EventDispatcher` | The same component as in v3.0, it publishes Gateway events to the user. In v3.1 the events are coming from all shards so a single instance is enough for a `GatewayDiscordClient`.
+|=======================
+
+=== Updating dependencies
+Discord4J v3.1 depends on Reactor Dysprosium release train. Please refer to their release notes for https://github.com/reactor/reactor-core/releases/tag/v3.3.0.RELEASE[reactor-core] and https://github.com/reactor/reactor-netty/releases/tag/v0.9.0.RELEASE[reactor-netty] as they include a range of improvements.
+
+Notable changes for a Discord4J environment:
+
+- Reactor now includes a `boundedElastic` Scheduler that caps the number of threads. It should help for cases when you do blocking operations whilst keeping a limit on the amount of threads created.
+- Reactor exceptions now provide most important debugging details at the start of the exception's output, while using debug mode.
+
+== Discord4J Features
+
+=== Connecting to the Gateway
+We added convenience methods to `DiscordClient`, namely static `DiscordClient.builder(token)` and `DiscordClient.create(token)` to quickly get started.
+
+Most notable change from v3.0 to v3.1 is the behavior of the `login()` method. We feel that the method makes most sense if it returns a `Mono` that completes as login is completed, and to return a handle for the underlying gateway connections.
+
+To connect using the default options:
+====
+[source,java]
+----
+DiscordClient client = DiscordClient.create(token); <1>
+GatewayDiscordClient gateway = client.login().block(); <2>
+
+gateway.on(ReadyEvent.class) <3>
+        .subscribe(ready -> System.out.println("Logged in as " + ready.getSelf().getUsername()));
+
+gateway.onDisconnect().block(); <4>
+----
+<1> Shortcut to `new DiscordClientBuilder(token).build()`
+<2> Acquire a synchronous handle on gateway connections, can be used to register events, get cached entities, etc.
+<3> Shortcut to `gateway.getEventDispatcher().on(ReadyEvent.class)`
+<4> To keep the `main` thread alive, await until disconnection occurs
+====
+
+=== Adding event listeners
+====
+[source,java]
+----
+gateway.on(MessageCreateEvent.class)
+        .map(MessageCreateEvent::getMessage)
+        .filter(msg -> msg.getContent().map("!ping"::equals).orElse(false))
+        .flatMap(Message::getChannel)
+        .flatMap(channel -> channel.createMessage("Pong!")
+                .onErrorResume(t -> Mono.empty())) <1>
+        .subscribe();
+
+gateway.on(MessageCreateEvent.class,
+        event -> Mono.just(event.getMessage())
+                .filter(message -> message.getContent().map("!ping"::equals).orElse(false))
+                .flatMap(Message::getChannel)
+                .flatMap(channel -> channel.createMessage("Pong!")))
+        .subscribe(); <2>
+
+----
+<1> Needs error handling code along the chain
+<2> Error handling provided for you within the `event -> { ... }` block
+====
+
+=== Configuring initial presence (bot status)
+
+=== Requesting cached and REST entities
+Starting from v3.1, Discord4J allows you to access **REST entities**, which encapsulate a given Discord entity in terms of their identifiers, without querying the REST API until you require access to the data they represent. This is express across two kinds of classes:
+
+- `RestEntity` provides a way to query the REST API for an specific entity.
+- `EntityData` represents the JSON response from the REST API, it is obtained from `getData()` method in a given `RestEntity`.
+
+To retrieve these objects you should call methods in `DiscordClient`, obtained from calling `getClient().rest()` from most library objects, like `Event` and `Entity` instances.
+
+=== Customizing resources
+
+==== Default options in `DiscordClientBuilder`
+|=======================
+| Option | Default provided
+
+| `ReactorResources` | Default HttpClient using the default Reactor Netty options and a default Scheduler for timed tasks
+| `JacksonResources` | Jackson 2.10 ObjectMapper configured specifically for Discord4J
+| `RouterFactory` | Factory to coordinate REST API requests across monolithic and distributed clients
+| `RouterOptions` | Default options for a `RouterFactory` regarding Scheduler
+|=======================
+
+== List of changes
+
+=== Additions
+- [core] `ReactorResources` to group `HttpClient` and `Scheduler` setup
+- [core] `CoreResources` to group all resources used by `DiscordClient`
+- [build] rsocket to test dependency (`RSocketShardCoordinator`)
+
+=== API changes in `discord4j-core`
+- `JacksonResourceProvider` -> `JacksonResources`
+- Remove `ClientConfig`. No current direct replacement
+- Remove `DiscordClient#getServiceMediator`. You can access `DiscordClient`-specific resources through `#getCoreResources`
+- Calling `getClient()` now returns `GatewayDiscordClient` to obtain cached entities
+- REST only `DiscordClient` is returned from `getClient().rest()`
+- `DiscordClient` signature changes due to new model:
+** Signature change: `getChannelById` now returns `RestChannel` instead of `Mono<Channel>`
+** Signature change: `getMemberById` now returns `RestMember` instead of `Mono<Member>`
+** Signature change: `getMessageById` now returns `RestMessage` instead of `Mono<Message>`
+** Signature change: `getRoleById` now returns `RestRole` instead of `Mono<Role>`
+** Signature change: `getUserById` now returns `RestUser` instead of `Mono<User>`
+** Signature change: `getWebhookById` now returns `RestWebhook` instead of `Mono<Webhook>`
+** Signature change: `getApplicationInfo` now returns `Mono<ApplicationInfoData>` instead of `Mono<ApplicationInfo>`
+** Signature change: `getGuilds` now returns `Flux<UserGuildData>` instead of `Flux<Guild>`
+** Signature change: `getRegions` now returns `Flux<RegionData>` instead of `Flux<Region>`
+** Signature change: `getSelf` now returns `Mono<UserData>` instead of `Mono<User>`
+** Signature change: `createGuild` now returns `Mono<GuildData>` instead of `Mono<Guild>`
+** Signature change: `getInvite` now returns `Mono<InviteData>` instead of `Mono<Invite>`
+** Signature change: `edit` now returns `Mono<UserData>` instead of `Mono<User>`
+- Remove `DiscordClient#getEventDispatcher`. Now available through `GatewayDiscordClient`
+- *Behavior change*: a single `EventDispatcher` publishes events from all shards connected during `login()` call
+- `DiscordClient#login` now returns `Mono<Gateway>` instead of `Mono<Void>`, see behavior change
+- Behavior change: `DiscordClient#login` completes when all shards have connected instead of completing when a shard disconnects
+- Many methods removed from `DiscordClientBuilder`
+- `setJacksonResourceProvider` -> `setJacksonResources`
