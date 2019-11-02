@@ -5,6 +5,8 @@ dependencies {
 
     testCompile "junit:junit:$junit_version"
     testCompile "ch.qos.logback:logback-classic:$logback_version"
+    testCompile "io.rsocket:rsocket-core:$rsocket_version"
+    testCompile "io.rsocket:rsocket-transport-netty:$rsocket_version"
 }
 
 javadoc {

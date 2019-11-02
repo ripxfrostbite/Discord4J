@@ -17,7 +17,8 @@
     <logger name="discord4j.dispatch" level="INFO"/>
     <logger name="discord4j.events" level="DEBUG"/>
 
-    <logger name="io.rsocket.FrameLogger" level="INFO"/>
+    <logger name="io.rsocket" level="INFO"/>
+    <logger name="io.rsocket.FrameLogger" level="OFF"/>
 
     <turboFilter class="discord4j.core.logback.GatewayEventFilter">
         <Include>MESSAGE_CREATE</Include>
