@@ -682,7 +682,7 @@ public class DiscordUtils {
 				game == null ? null : game.name,
 				game == null ? null : game.url,
 				StatusType.get(status),
-				game == null ? ActivityType.PLAYING : ActivityType.values()[game.type]);
+				ActivityType.PLAYING);
 	}
 
 	/**
